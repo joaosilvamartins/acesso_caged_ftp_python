@@ -2,7 +2,7 @@ from ftplib import FTP
 import os
 import re
 import py7zr  # Biblioteca para extrair arquivos .7z
-import pandas as pd  # Para leitura do Excel
+import pandas as pd  # Para manipulação de dados
 
 # Configurações do servidor FTP
 host = "ftp.mtps.gov.br"
@@ -44,7 +44,7 @@ for ano in anos:
             caminho_mes = f"{caminho_ano}{mes}/"
             try:
                 ftp.cwd(caminho_mes)
-                arquivos = [arq for arq in ftp.nlst() if arq.endswith(".7z")]
+                arquivos = [arq for arq in ftp.nlst() if arq.endswith(".7z") and "MOV" in arq]
 
                 if arquivos:
                     arquivos.sort()
@@ -71,10 +71,9 @@ for ano in anos:
                         caminho_txt = f"NOVO_CAGED/{ano}/{mes}/{arquivo_txt}"
                         print(f"Processando {caminho_txt}...")
 
-                        # Dicionário para contar as ocorrências de cada tipomovimentacao
-                        contagem_movimentacao = {}
+                        dados = []
 
-                        # Ler o arquivo .txt e contar os registros de interesse
+                        # Ler o arquivo .txt e coletar os dados
                         with open(caminho_txt, "r", encoding="latin-1") as txtfile:
                             reader = txtfile.readlines()
 
@@ -84,22 +83,19 @@ for ano in anos:
                                     cbo2002ocupacao = colunas[7]
                                     tipomovimentacao = colunas[16]
 
-                                    # Filtrar apenas as ocupações desejadas
                                     if cbo2002ocupacao in ocupacoes_permitidas:
-                                        if tipomovimentacao in contagem_movimentacao:
-                                            contagem_movimentacao[tipomovimentacao] += 1
-                                        else:
-                                            contagem_movimentacao[tipomovimentacao] = 1
+                                        dados.append([ano, mes, tipomovimentacao, cbo2002ocupacao, 1])
 
-                        # Criar o arquivo "dados_extraidos.txt"
-                        txt_saida_path = f"NOVO_CAGED/{ano}/{mes}/dados_extraidos.txt"
-                        with open(txt_saida_path, "w", encoding="utf-8") as out_txt:
-                            for codigo, quantidade in contagem_movimentacao.items():
-                                descricao = codigo_para_descricao.get(codigo, "Descrição não encontrada")
-                                out_txt.write(f"{descricao}: {quantidade}\n")
+                        # Criar DataFrame e agrupar os dados
+                        df = pd.DataFrame(dados, columns=["ano", "mês", "código movimentação", "código ocupação", "quantidade"])
+                        df = df.groupby(["ano", "mês", "código movimentação", "código ocupação"]).sum().reset_index()
 
-                        print(f"Dados extraídos e salvos em {txt_saida_path}")
+                        # Salvar como CSV
+                        csv_saida_path = f"NOVO_CAGED/{ano}/{mes}/dados_extraidos.csv"
+                        df.to_csv(csv_saida_path, index=False, encoding="utf-8-sig", sep=";")
 
+                        print(f"Dados extraídos e salvos em {csv_saida_path}")
+                
                 else:
                     print(f"Nenhum arquivo .7z encontrado em {caminho_mes}")
 
